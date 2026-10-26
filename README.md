@@ -17,6 +17,9 @@ but it works on any Paramount+ video.
   own tile set). Short clips have no thumbnails, so they show "no preview" everywhere.
   Note: hovering past the end shows "no preview", which tells you the video is over by then.
 - **Touch-friendly bar**: on iPhone/iPad dragging previews the thumbnail and releasing jumps there.
+- **YouTube-style clicks**: a short click on the video (or Space / K) plays or pauses with a brief icon in the middle,
+  without bringing up the controls or the bar (moving the mouse does). Holding the click (or Space / K) plays at 2x
+  until you let go.
 - **Keyboard**: ←/→ 10 s · Shift 30 s · Ctrl 1 min · Ctrl+Shift 5 min · `T` shows/hides the elapsed time.
 - Doesn't pass the duration to the OS / browser media controls (Media Session).
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.2.0
+// @version      0.3.0
 // @description  Hides durations and time remaining on Paramount+ (made for UFC fight and event replays). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails.
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
@@ -72,6 +72,21 @@
       background: rgba(0,0,0,.65); color: #fff; font: 600 28px/1 Arial, sans-serif; padding: 14px 22px; border-radius: 8px;
       opacity: 0; transition: opacity .25s; }
     .ppns-toast.on { opacity: 1; transition: none; }
+    /* Pausing with a click / Space doesn't bring up the controls (moving the mouse does) */
+    html.ppns-hideui .aa-player-skin .controls-manager,
+    html.ppns-hideui .aa-player-skin .top-menu-manager,
+    html.ppns-hideui .aa-player-skin .controls-backplane,
+    html.ppns-hideui .aa-player-skin .top-menu-backplane,
+    html.ppns-hideui .aa-player-skin .metadata-manager,
+    html.ppns-hideui .top-menu-hint,
+    html.ppns-hideui .aa-player-skin .skin-metadata-manager-content { opacity: 0 !important; pointer-events: none !important; transition: none !important; }
+    .ppns-bezel { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%;
+      background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; z-index: 60; }
+    .ppns-bezel.on { animation: ppns-bezel .55s ease-out forwards; }
+    @keyframes ppns-bezel { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.6); } }
+    .ppns-speed { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 6px;
+      background: rgba(0,0,0,.6); color: #fff; font: 600 16px/1 Arial, sans-serif; padding: 8px 14px; border-radius: 18px; pointer-events: none; z-index: 60; }
+    .ppns-speed.on { display: flex; }
   `;
   const addStyle = () => {
     if (document.getElementById('ppns-style')) return;
@@ -445,6 +460,162 @@
       e.stopImmediatePropagation();
       toggleElapsed();
     }
+  }, true);
+
+  const YT = {
+    prefix: 'ppns-',
+    host: '.aa-player-skin',
+    // clicks on these keep their normal behavior
+    exclude: '.controls-bottom, .top-menu-manager, #ppns-panel, .skip-button-wrapper, .panel-manager, .mylist-panel, ' +
+      '.ad-info-manager, button, a, input',
+    video: () => getVideo(),
+    // not during ads (they play in another <video>)
+    ready: () => {
+      const ad = document.querySelector('.aa-player-skin .ad-info-manager');
+      return !!getVideo() && !(ad && !ad.classList.contains('remove'));
+    },
+  };
+  // ---------- 6) YouTube-style click: tap = play/pause with a brief icon, hold = 2x ----------
+  // A short click (or Space/K) toggles play/pause, shows a quick icon in the middle and does NOT bring up the controls
+  // (they come back when the mouse moves). Holding the button plays at 2x until it's released.
+  const HOLD_MS = 350;
+  const ICON_PLAY = '<svg viewBox="0 0 24 24" width="40" height="40"><path fill="#fff" d="M8 5v14l11-7z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" width="40" height="40"><path fill="#fff" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+  const ICON_FAST = '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="#fff" d="M4 6v12l8.5-6zm9 0v12l8.5-6z"/></svg>';
+  let hold = null;          // { timer, active, prevRate, wasPaused }
+  let swallow = false;      // the rest of an intercepted mouse press (up/click) must not reach the player
+  let hideUiFrom = null;    // mouse position when the UI was hidden; moving away from it shows the controls again
+  let lastMouse = null;
+
+  const yt = (cls) => YT.prefix + cls;
+  const ytHost = () => document.querySelector(YT.host);
+
+  function hideUi() {
+    document.documentElement.classList.add(yt('hideui'));
+  }
+  window.addEventListener('mousemove', (e) => {
+    lastMouse = { x: e.clientX, y: e.clientY };
+    if (!hideUiFrom) return;
+    if (Math.abs(e.clientX - hideUiFrom.x) + Math.abs(e.clientY - hideUiFrom.y) > 4) {
+      hideUiFrom = null;
+      document.documentElement.classList.remove(yt('hideui'));
+    }
+  }, true);
+
+  function bezel(svg) {
+    const host = ytHost();
+    if (!host) return null;
+    let el = host.querySelector(':scope > .' + yt('bezel'));
+    if (!el) {
+      el = document.createElement('div');
+      el.className = yt('bezel');
+      host.appendChild(el);
+    }
+    el.innerHTML = svg;
+    el.classList.remove('on');
+    void el.offsetWidth;    // restart the animation
+    el.classList.add('on');
+    return el;
+  }
+
+  function speedBadge(show) {
+    const host = ytHost();
+    if (!host) return;
+    let el = host.querySelector(':scope > .' + yt('speed'));
+    if (!el) {
+      el = document.createElement('div');
+      el.className = yt('speed');
+      el.innerHTML = '2x ' + ICON_FAST;
+      host.appendChild(el);
+    }
+    el.classList.toggle('on', show);
+  }
+
+  function togglePlayback(pos) {
+    const v = YT.video();
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+    hideUiFrom = pos || lastMouse || { x: -1e6, y: -1e6 };
+    hideUi();
+    bezel(v.paused ? ICON_PAUSE : ICON_PLAY);
+  }
+
+  function holdStart(pos) {
+    const v = YT.video();
+    if (!v) return;
+    hold = { timer: setTimeout(() => {
+      hold.active = true;
+      hold.prevRate = v.playbackRate;
+      hold.wasPaused = v.paused;
+      v.playbackRate = 2;
+      if (v.paused) v.play();
+      hideUiFrom = pos || lastMouse || { x: -1e6, y: -1e6 };
+      hideUi();
+      speedBadge(true);
+    }, HOLD_MS) };
+  }
+  // Returns true if the press was a hold (so it must not toggle).
+  function holdEnd() {
+    if (!hold) return false;
+    clearTimeout(hold.timer);
+    const h = hold;
+    hold = null;
+    if (!h.active) return false;
+    const v = YT.video();
+    if (v) {
+      v.playbackRate = h.prevRate || 1;
+      if (h.wasPaused) v.pause();
+    }
+    speedBadge(false);
+    return true;
+  }
+
+  const onSurface = (e) => {
+    const host = ytHost();
+    return host && e.target instanceof Element && host.contains(e.target) && !e.target.closest(YT.exclude) && YT.ready();
+  };
+
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !onSurface(e)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    swallow = true;
+    holdStart({ x: e.clientX, y: e.clientY });
+  }, true);
+  ['mousedown', 'mouseup', 'click'].forEach((type) => window.addEventListener(type, (e) => {
+    if (!swallow) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (type === 'click') swallow = false;
+  }, true));
+  window.addEventListener('pointerup', (e) => {
+    if (!swallow || e.pointerType !== 'mouse') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!holdEnd()) togglePlayback({ x: e.clientX, y: e.clientY });
+    setTimeout(() => { swallow = false; }, 0);   // in case no click event follows
+  }, true);
+
+  // Space / K behave the same: tap toggles, hold plays at 2x.
+  const isPauseKey = (e) => (e.key === ' ' || e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.altKey && !e.metaKey;
+  const typing = (e) => {
+    const t = e.target;
+    return t && ((/INPUT|TEXTAREA|SELECT/.test(t.tagName || '') && !(t.classList && t.classList.contains('seek-bar-range-input'))) || t.isContentEditable);
+  };
+  window.addEventListener('keydown', (e) => {
+    if (!isPauseKey(e) || typing(e) || !ytHost() || !YT.ready()) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!e.repeat && !hold) holdStart(null);
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (!isPauseKey(e) || typing(e) || !ytHost() || !YT.ready()) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!holdEnd()) togglePlayback(null);
+  }, true);
+  window.addEventListener('keypress', (e) => {
+    if (isPauseKey(e) && !typing(e) && ytHost() && YT.ready()) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
   // ---------- Start ----------

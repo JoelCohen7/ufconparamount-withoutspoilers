@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.3.0
-// @description  Hides durations and time remaining on Paramount+ (made for UFC fight and event replays). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails.
+// @version      0.4.0
+// @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails.
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
 // @updateURL    https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/main/ufconparamount-withoutspoilers.user.js
@@ -30,16 +30,72 @@
   let windowSec = (WINDOWS_MIN.includes(lsGet(LS_WIN, DEFAULT_WINDOW_MIN)) ? lsGet(LS_WIN, DEFAULT_WINDOW_MIN) : DEFAULT_WINDOW_MIN) * 60;
   let showElapsed = lsGet(LS_SHOWTIME, true);
 
+  // ---------- 0) Only UFC, Dana White's Contender Series and LFA replays ----------
+  // Other shows, movies and live events are left exactly as Paramount+ shows them.
+  const FIGHT_TEXT = /\b(ufc|lfa|legacy fighting|contender series)\b/i;
+  const FIGHT_SLUG = /^(ufc|lfa|legacy-fighting|dana-white-contender-series)/i;
+  const CARD = '.swiper-slide, article, .episode, .grid-view-item, li';
+
+  // The series of the video on this page (from the page's own analytics data or its og:title), or null if not known yet.
+  function seriesName() {
+    const u = window.utag_data;
+    if (u && (u.showSeriesTitle || u.show)) return u.showSeriesTitle || u.show;
+    const og = document.querySelector('meta[property="og:title"]');
+    return og && og.content ? og.content : null;
+  }
+  // 'fight' = the whole page is fight content, 'other' = it isn't, 'mixed' = decide card by card (home, my list, search...)
+  function pageScope() {
+    const path = location.pathname;
+    if (/^\/(?:[a-z]{2}\/)?(shows|movies)\/video\//.test(path)) {
+      const series = seriesName();
+      return series === null || FIGHT_TEXT.test(series) ? 'fight' : 'other';   // unknown yet: hide first
+    }
+    const m = /^\/(?:[a-z]{2}\/)?shows\/([^/]+)/.exec(path);
+    if (m) return FIGHT_SLUG.test(m[1]) ? 'fight' : 'other';
+    return 'mixed';
+  }
+  function isLive() {
+    const u = window.utag_data;
+    if (u && u.isDcrLive === true) return true;
+    if (/\/live-tv\//.test(location.pathname)) return true;
+    const v = getVideo();
+    return !!(v && v.duration === Infinity);
+  }
+  let scope = pageScope();
+  // Our player (panel, hidden bar, clicks, keys) only runs on fight replays.
+  function playerActive() {
+    return scope === 'fight' && /\/video\//.test(location.pathname) && !isLive();
+  }
+  function isFightCard(card) {
+    const bits = [card.innerText || ''];
+    card.querySelectorAll('img[alt]').forEach((i) => bits.push(i.alt));
+    card.querySelectorAll('[aa-link]').forEach((a) => bits.push(a.getAttribute('aa-link')));
+    if (FIGHT_TEXT.test(bits.join(' | '))) return true;
+    return [...card.querySelectorAll('a[href^="/shows/"]')].some((a) => FIGHT_SLUG.test(a.getAttribute('href').split('/')[2] || ''));
+  }
+  function inScope(el) {
+    if (scope === 'fight') return true;
+    if (scope === 'other') return false;
+    const card = el.closest(CARD);
+    if (!card) return false;
+    if (card.classList.contains('ppns-fightcard')) return true;
+    if (!isFightCard(card)) return false;
+    card.classList.add('ppns-fightcard');
+    return true;
+  }
+
   // ---------- 1) Hide everything that shows a duration ----------
   const css = `
-    .aa-player-skin .controls-time-wrapper,
-    .aa-player-skin .seek-bar,
-    .aa-player-skin .time-tip-plus-placeholder,
-    .aa-player-skin .seek-bar-admarkers,
-    .video__metadata span.duration,
-    .episode-progress-bar-wrapper,
-    .info-wrapper .progress-bar,
-    .thumb-wrapper .progress-bar,
+    html.ppns-player .aa-player-skin .controls-time-wrapper,
+    html.ppns-player .aa-player-skin .seek-bar,
+    html.ppns-player .aa-player-skin .time-tip-plus-placeholder,
+    html.ppns-player .aa-player-skin .seek-bar-admarkers,
+    html.ppns-on .video__metadata span.duration,
+    html.ppns-on .episode-progress-bar-wrapper,
+    html.ppns-on .info-wrapper .progress-bar,
+    html.ppns-on .thumb-wrapper .progress-bar,
+    .ppns-fightcard .episode-progress-bar-wrapper,
+    .ppns-fightcard .progress-bar,
     .ppns-hidden-time { display: none !important; }
 
     #ppns-panel { width: 100%; padding: 0 24px 6px; box-sizing: border-box; position: relative; z-index: 5;
@@ -100,10 +156,16 @@
   // The player's own CSS wins over ours for some parts (it uses !important), so those get an inline !important too.
   const NATIVE_HIDE = ['.aa-player-skin .controls-time-wrapper', '.aa-player-skin .seek-bar',
     '.aa-player-skin .time-tip-plus-placeholder', '.aa-player-skin .seek-bar-admarkers'];
-  const hideNative = () => {
+  const hideNative = (on) => {
     for (const sel of NATIVE_HIDE) {
       document.querySelectorAll(sel).forEach((el) => {
-        if (el.style.getPropertyValue('display') !== 'none') el.style.setProperty('display', 'none', 'important');
+        if (on && el.style.getPropertyValue('display') !== 'none') {
+          el.style.setProperty('display', 'none', 'important');
+          el.dataset.ppnsHidden = '1';
+        } else if (!on && el.dataset.ppnsHidden) {
+          el.style.removeProperty('display');
+          delete el.dataset.ppnsHidden;
+        }
       });
     }
   };
@@ -116,15 +178,26 @@
   const LEFT_WORD = /\b(left|remaining|restantes?|quedan|restan|faltan|restam)\b/i;
   const LEAD_RE = /^(\s*)(\d+\s*H\s*)?\d+\s*M\s+(?=[A-Z][a-z]{2}\s+\d)/;
   const ours = (el) => el.closest('#ppns-panel, .ppns-toast, script, style');
+  const stripped = new Map();   // text node -> original text, to put it back if the page turns out not to be fight content
   const checkText = (n) => {
     const el = n.parentElement;
     if (!el || ours(el)) return;
     const t = n.nodeValue;
-    if (TIME_RE.test(t) || (LEFT_WORD.test(t) && LEFT_RE.test(t))) {
+    const dur = TIME_RE.test(t) || (LEFT_WORD.test(t) && LEFT_RE.test(t));
+    if (!dur && !LEAD_RE.test(t)) return;
+    if (!inScope(el)) return;
+    if (dur) {
       el.classList.add('ppns-hidden-time');
-    } else if (LEAD_RE.test(t)) {
+    } else {
+      stripped.set(n, t);
       n.nodeValue = t.replace(LEAD_RE, '$1');
     }
+  };
+  // Undo the hiding (used when a video page turns out to be another show).
+  const unscrub = () => {
+    document.querySelectorAll('.ppns-hidden-time').forEach((el) => el.classList.remove('ppns-hidden-time'));
+    stripped.forEach((t, n) => { n.nodeValue = t; });
+    stripped.clear();
   };
   const scrubText = (root) => {
     if (!root) return;
@@ -136,7 +209,10 @@
   // ---------- 2) Don't hand the duration to the OS / browser media controls ----------
   try {
     if (navigator.mediaSession && navigator.mediaSession.setPositionState) {
-      navigator.mediaSession.setPositionState = function () {};
+      const original = navigator.mediaSession.setPositionState.bind(navigator.mediaSession);
+      navigator.mediaSession.setPositionState = function (state) {
+        if (!playerActive()) return original(state);
+      };
     }
   } catch {}
 
@@ -419,7 +495,18 @@
 
   function attach() {
     addStyle();
-    hideNative();
+    const prev = scope;
+    scope = pageScope();
+    if (prev !== scope && scope !== 'fight') unscrub();
+    const active = playerActive();
+    const root = document.documentElement;
+    root.classList.toggle('ppns-on', scope === 'fight');
+    root.classList.toggle('ppns-player', active);
+    hideNative(active);
+    if (!active) {
+      if (panel && panel.parentNode) panel.remove();
+      return;
+    }
     const v = getVideo();
     if (v !== video) {
       video = v;
@@ -440,7 +527,7 @@
   // ---------- 5) Keyboard ----------
   // ←/→ 10 s · Shift 30 s · Ctrl 1 min · Ctrl+Shift 5 min · T shows/hides the elapsed time
   window.addEventListener('keydown', (e) => {
-    if (!video || !document.querySelector('.aa-player-skin')) return;
+    if (!video || !document.querySelector('.aa-player-skin') || !playerActive()) return;
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|TEXTAREA|SELECT/.test(tag) && !(e.target.classList && e.target.classList.contains('seek-bar-range-input'))) return;
     if (e.target && e.target.isContentEditable) return;
@@ -472,7 +559,7 @@
     // not during ads (they play in another <video>)
     ready: () => {
       const ad = document.querySelector('.aa-player-skin .ad-info-manager');
-      return !!getVideo() && !(ad && !ad.classList.contains('remove'));
+      return playerActive() && !!getVideo() && !(ad && !ad.classList.contains('remove'));
     },
   };
   // ---------- 6) YouTube-style click: tap = play/pause with a brief icon, hold = 2x ----------

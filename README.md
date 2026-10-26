@@ -2,8 +2,11 @@
 
 A userscript for [Paramount+](https://www.paramountplus.com) that never shows how long a video is or how much is left,
 so you can watch UFC fight replays and event replays without knowing whether they ended in a finish or went to the
-judges. Made for the UFC libraries (UFC 2000s, UFC 2010s, numbered events, Fight Night, Dana White's Contender Series),
-but it works on any Paramount+ video.
+judges.
+
+It only acts on **UFC, Dana White's Contender Series and LFA replays** (any series whose name or page contains UFC, LFA,
+Legacy Fighting or Contender Series). Other shows, movies and **live events** are left exactly as Paramount+ shows
+them. On mixed pages (home, My List, search) it hides durations and progress bars only on the cards of those series.
 
 ## What it does
 

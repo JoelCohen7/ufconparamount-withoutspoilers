@@ -5,8 +5,8 @@
 // @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails. Works on computers and on iPhone/iPad (Safari + Userscripts).
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
-// @updateURL    https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/main/ufconparamount-withoutspoilers.user.js
-// @downloadURL  https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/main/ufconparamount-withoutspoilers.user.js
+// @updateURL    https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/ios/ufconparamount-withoutspoilers.user.js
+// @downloadURL  https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/ios/ufconparamount-withoutspoilers.user.js
 // @run-at       document-start
 // @grant        none
 // @noframes

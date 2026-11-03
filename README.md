@@ -33,7 +33,7 @@ them. On mixed pages (home, My List, search) it hides durations and progress bar
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in a Chromium browser (Brave, Chrome, Edge).
    In Brave/Chrome, open the extension's **Details** and turn on **Allow User Scripts**.
-2. Open **[ufconparamount-withoutspoilers.user.js](https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/main/ufconparamount-withoutspoilers.user.js)**
+2. Open **[ufconparamount-withoutspoilers.user.js](https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/ios/ufconparamount-withoutspoilers.user.js)**
    and click **Install**. Tampermonkey checks that same link for updates.
 
 Paramount+'s player doesn't start in LibreWolf with its default privacy settings, so use a Chromium browser.
@@ -47,7 +47,7 @@ by quoid). iOS 15.1 or later.
 
 1. Install Userscripts from the App Store and open it once (it picks a folder for the scripts on its own).
 2. Settings → Apps → Safari → Extensions → **Userscripts**: turn it on and set **All Websites → Allow**.
-3. In Safari open **[ufconparamount-withoutspoilers.user.js](https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/main/ufconparamount-withoutspoilers.user.js)**, tap the **puzzle piece / AA** button in the address bar → **Userscripts** →
+3. In Safari open **[ufconparamount-withoutspoilers.user.js](https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/ios/ufconparamount-withoutspoilers.user.js)**, tap the **puzzle piece / AA** button in the address bar → **Userscripts** →
    **Tap to install** → **Install**.
 4. Open [paramountplus.com](https://www.paramountplus.com), sign in and play a video.
 

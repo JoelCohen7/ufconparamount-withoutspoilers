@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.5.8
+// @version      0.6.0
 // @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails. Works on computers and on iPhone/iPad (Safari + Userscripts).
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
@@ -16,6 +16,15 @@
   'use strict';
   if (window.__ppns) return;
   window.__ppns = true;
+
+  // ---------- iPhone/iPad: look like a Mac to Paramount+ ----------
+  // With "Request Desktop Website" Safari already says it is a Mac, but Paramount+ still spots an iPhone/iPad by its
+  // touch points and tries to open its app instead of playing (the page just reloads). The page is told there are none;
+  // this script keeps the real number for its own touch controls.
+  const REAL_TOUCH_POINTS = navigator.maxTouchPoints || 0;
+  if (REAL_TOUCH_POINTS > 1 && /Macintosh/.test(navigator.userAgent)) {
+    try { Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 0, configurable: true }); } catch {}
+  }
 
   // ---------- Settings ----------
   const WINDOWS_MIN = [15, 30, 60, 90, 120];          // possible bar scales (minutes); click the scale label to cycle
@@ -817,11 +826,11 @@
   let touchDevice = null;
   const TOUCH = () => {
     if (touchDevice === null && document.documentElement && document.body) {
-      touchDevice = navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches;
+      touchDevice = REAL_TOUCH_POINTS > 0 && matchMedia('(pointer: coarse)').matches;
     }
     return !!touchDevice;
   };
-  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && REAL_TOUCH_POINTS > 1);
   const TAP_ZONE = 0.35;        // left/right share of the player width for double-tap jumps
   const DOUBLE_TAP_MS = 350;
   const STREAK_MS = 800;        // after a double tap, more taps on the same side keep adding 10 s
@@ -1085,7 +1094,7 @@
       const v = TL.video();
       const ver = (/OS (\d+[_\d]*)/.exec(navigator.userAgent) || [])[1] || '?';
       d.textContent = [
-        'v0.5.8  iOS ' + ver.replace(/_/g, '.') + '  fs=' + pfsOn + ' real=' + !!fsElement(),
+        'v0.6.0  iOS ' + ver.replace(/_/g, '.') + '  fs=' + pfsOn + ' real=' + !!fsElement(),
         'screen ' + screen.width + 'x' + screen.height + '  dpr ' + devicePixelRatio,
         'inner ' + innerWidth + 'x' + innerHeight + '  scrollY ' + Math.round(scrollY) + '  docH ' + document.documentElement.scrollHeight,
         'vv ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' top ' + Math.round(vv.offsetTop) + ' pageTop ' + Math.round(vv.pageTop) : '-'),
@@ -1221,7 +1230,7 @@
         <div class="ppns-t-top">
           <button data-act="back" aria-label="Back">${ICON_BACK}</button>
           <span class="ppns-t-flex"></span>
-          <button data-act="info" class="ppns-t-ver" aria-label="Version and diagnostics">v0.5.8</button>
+          <button data-act="info" class="ppns-t-ver" aria-label="Version and diagnostics">v0.6.0</button>
           <button data-act="site" aria-label="Site controls">${ICON_MORE}</button>
           <button data-act="fs" aria-label="Full screen">${ICON_FS}</button>
         </div>
@@ -1348,7 +1357,7 @@
     touchUpdate();
     return touchOn() && touchEl ? touchEl.querySelector('.ppns-t-bot') : null;
   }
-  if (navigator.maxTouchPoints > 0) setInterval(touchUpdate, 1000);
+  if (REAL_TOUCH_POINTS > 0) setInterval(touchUpdate, 1000);
 
   // ---- gestures on the video ----
   let tp = null;            // finger down on the video: { id, x, y, moved, hold, timer }

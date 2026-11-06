@@ -49,7 +49,13 @@ by quoid). iOS 15.1 or later.
 2. Settings → Apps → Safari → Extensions → **Userscripts**: turn it on and set **All Websites → Allow**.
 3. In Safari open **[ufconparamount-withoutspoilers.user.js](https://raw.githubusercontent.com/JoelCohen7/ufconparamount-withoutspoilers/ios/ufconparamount-withoutspoilers.user.js)**, tap the **puzzle piece / AA** button in the address bar → **Userscripts** →
    **Tap to install** → **Install**.
-4. Open [paramountplus.com](https://www.paramountplus.com), sign in and play a video.
+4. **iPhone only:** open [paramountplus.com](https://www.paramountplus.com), tap **AA** in the address bar → **Website
+   Settings** → turn on **Request Desktop Website**. On the iPhone's mobile site Paramount+ sends you to its app instead
+   of playing. (iPad Safari already asks for the desktop site.)
+5. Open [paramountplus.com](https://www.paramountplus.com), sign in and play a video.
+
+Even on the desktop site Paramount+ tells an iPhone/iPad apart from a Mac by its touch screen and tries to open the app
+(the page just reloads). The script hides the touch points from the page, so it plays in Safari like on a Mac.
 
 Userscripts checks the same link for updates (open its popup → **Check for updates**).
 

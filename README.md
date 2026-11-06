@@ -60,12 +60,16 @@ On a touch screen the player gets its own controls instead of the site's:
 - **Hold** a finger on the video: 2x until you let go.
 - **The bar**: drag your finger to see the thumbnail and the time; let go to jump there.
 - **⛶** fills the screen. On iPhone, turning it sideways does that too (and upright again goes back). It is a full
-  screen inside Safari, never Apple's own video player, which would show the duration.
+  screen inside Safari, never Apple's own video player, which would show the duration. On iPhone Safari only hides its
+  bars when the page scrolls, so **swipe up on the video** once to hide them (a hint says so while they show).
+- **Two fingers** (full screen): pinch to zoom, drag to move the picture anywhere. Pinch below the original size to put
+  it back as it was. The zoom and position are remembered.
 - **⋯** brings back the site's own controls (settings, audio, etc.), still without any times. Tap it again to go back.
 - **‹** goes back.
 - On iPhone held upright only the bar and the time are shown; the jump buttons show up in full screen.
 
-Safari's own full-screen player, Picture in Picture and AirPlay are blocked, because they show the duration. The lock
+Safari's own full-screen player, Picture in Picture and AirPlay are blocked, because they show the duration. Safari's
+"Open in the app" banner is not shown either. The lock
 screen / Control Center "Now Playing" widget is told every video is 10 hours long, so its bar means nothing.
 
 On an iPad with a keyboard the keyboard shortcuts work too; with a trackpad it behaves like a computer.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.5.4
+// @version      0.5.5
 // @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails. Works on computers and on iPhone/iPad (Safari + Userscripts).
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
@@ -895,9 +895,11 @@
     [data-ppns-pfs-fill] { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important;
       width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; min-height: 0 !important;
       margin: 0 !important; transform: none !important; }
-    /* pinch out = fill the screen (cropping a little), pinch in = whole picture */
-    html.ppns-fill [data-ppns-pfs] video, html.ppns-fill [data-ppns-surface]:fullscreen video,
-    html.ppns-fill [data-ppns-surface]:-webkit-full-screen video { object-fit: cover !important; }
+    /* two fingers in full screen: zoom and move the picture freely */
+    html.ppns-pfs-on [data-ppns-pfs] video, html [data-ppns-surface]:fullscreen video, html [data-ppns-surface]:-webkit-full-screen video {
+      transform: translate(var(--ppns-zx, 0px), var(--ppns-zy, 0px)) scale(var(--ppns-zs, 1)) !important; transform-origin: 50% 50% !important;
+      transition: none !important; }
+    #ppns-touch .ppns-t-ver { font-size: 11px; opacity: .45; padding: 0 6px; }
     [data-ppns-pfs-anc] { transform: none !important; filter: none !important; contain: none !important; will-change: auto !important;
       perspective: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
       container-type: normal !important; z-index: 2147483600 !important; }
@@ -915,7 +917,8 @@
   };
 
   let touchEl = null;
-  let fillPref = !!lsGet('ppns:fill', false);   // pinched to fill the screen (remembered)
+  // Zoom and position of the picture in full screen (x, y: share of the screen), set with two fingers; remembered.
+  let view = Object.assign({ s: 1, x: 0, y: 0 }, lsGet('ppns:view', null) || {});
   // After one of our buttons acted, Safari's own click for that touch is dropped wherever it lands
   // (the layout may have changed under the finger, e.g. leaving full screen).
   let nativeClickOff = 0;
@@ -1002,6 +1005,14 @@
     st.setProperty('--ppns-vt', (vv ? vv.offsetTop : 0) + 'px');
     st.setProperty('--ppns-vw', (vv ? vv.width : innerWidth) + 'px');
     st.setProperty('--ppns-vh', (vv ? vv.height : innerHeight) + 'px');
+    applyView();
+  }
+  function applyView() {
+    const st = document.documentElement.style;
+    const vv = window.visualViewport;
+    st.setProperty('--ppns-zs', String(view.s));
+    st.setProperty('--ppns-zx', Math.round(view.x * (vv ? vv.width : innerWidth)) + 'px');
+    st.setProperty('--ppns-zy', Math.round(view.y * (vv ? vv.height : innerHeight)) + 'px');
   }
   ['resize', 'scroll', 'orientationchange'].forEach((ev) => window.addEventListener(ev, fitToScreen, { passive: true }));
   try { ['resize', 'scroll'].forEach((ev) => window.visualViewport.addEventListener(ev, fitToScreen, { passive: true })); } catch {}
@@ -1126,6 +1137,7 @@
         <div class="ppns-t-top">
           <button data-act="back" aria-label="Back">${ICON_BACK}</button>
           <span class="ppns-t-flex"></span>
+          <span class="ppns-t-ver">v0.5.5</span>
           <button data-act="site" aria-label="Site controls">${ICON_MORE}</button>
           <button data-act="fs" aria-label="Full screen">${ICON_FS}</button>
         </div>
@@ -1223,7 +1235,7 @@
       return;
     }
     addTouchStyle();
-    if (document.documentElement.classList.contains('ppns-fill') !== fillPref) document.documentElement.classList.toggle('ppns-fill', fillPref);
+    if (!document.documentElement.style.getPropertyValue('--ppns-zs')) applyView();
     const h = playerRoot();
     if (!touchEl) touchEl = buildTouch();
     // Always the last child: the site's own layers may sit at the same (maximum) z-index, and the last one wins.
@@ -1346,33 +1358,42 @@
   };
   window.addEventListener('pointerup', (e) => fingerUp(e, false), true);
   window.addEventListener('pointercancel', (e) => fingerUp(e, true), true);
-  // Two fingers on the video: pinch out = fill the screen, pinch in = whole picture (shows in full screen).
+  // Two fingers on the video (full screen): pinch = zoom, drag = move the picture. Pinching below the original
+  // size puts it back as it was.
   let pinch = null;
   const fingerGap = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-  const setFill = (on) => {
-    fillPref = on;
-    document.documentElement.classList.toggle('ppns-fill', on);
-    lsSet('ppns:fill', on);
-    toast(on ? 'Fill screen' : 'Whole picture');
-  };
+  const fingerMid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   window.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 2 || !touchOn() || inOurUi(e.target)) return;
+    if (e.touches.length !== 2 || !touchOn() || !isFs() || inOurUi(e.target)) return;
     const r = playerRoot();
     if (!r || !r.contains(e.target)) return;
-    pinch = { gap: fingerGap(e.touches), done: false };
+    if (e.cancelable) e.preventDefault();            // no page scroll / zoom with two fingers
+    pinch = { gap: fingerGap(e.touches) || 1, mid: fingerMid(e.touches), s: view.s, x: view.x, y: view.y, small: false };
     if (tp) { clearTimeout(tp.timer); tp.moved = true; }
   }, { capture: true, passive: false });
   window.addEventListener('touchmove', (e) => {
     if (!pinch || e.touches.length !== 2) return;
-    if (e.cancelable) e.preventDefault();            // no page zoom
-    const ratio = fingerGap(e.touches) / (pinch.gap || 1);
-    if (pinch.done) return;
-    const fillNow = document.documentElement.classList.contains('ppns-fill');
-    if (ratio > 1.2 && !fillNow) { setFill(true); pinch.done = true; }
-    else if (ratio < 0.83 && fillNow) { setFill(false); pinch.done = true; }
+    if (e.cancelable) e.preventDefault();
+    const vv = window.visualViewport;
+    const W = vv ? vv.width : innerWidth, H = vv ? vv.height : innerHeight;
+    const m = fingerMid(e.touches);
+    const s = pinch.s * fingerGap(e.touches) / pinch.gap;
+    pinch.small = s < 0.92;
+    view.s = clamp(s, 1, 4);
+    view.x = clamp(pinch.x + (m.x - pinch.mid.x) / W, -1, 1);
+    view.y = clamp(pinch.y + (m.y - pinch.mid.y) / H, -1, 1);
+    applyView();
   }, { capture: true, passive: false });
   ['touchend', 'touchcancel'].forEach((type) => window.addEventListener(type, (e) => {
-    if (pinch && e.touches.length < 2) pinch = null;
+    if (!pinch || e.touches.length >= 2) return;
+    if (pinch.small) {
+      view = { s: 1, x: 0, y: 0 };
+      applyView();
+      toast('Original view');
+    }
+    pinch = null;
+    lsSet('ppns:view', view);
   }, { capture: true }));
 
   // Outside full screen the page can still be scrolled with a finger on the video (touch-action: pan-y);

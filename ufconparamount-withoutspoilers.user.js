@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.5.5
+// @version      0.5.6
 // @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails. Works on computers and on iPhone/iPad (Safari + Userscripts).
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
@@ -895,11 +895,18 @@
     [data-ppns-pfs-fill] { position: absolute !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important;
       width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; min-height: 0 !important;
       margin: 0 !important; transform: none !important; }
+    /* In full screen the video and our controls are pinned to the visible area themselves, whatever the site's boxes do:
+       nothing is left under Safari's old bars, and the time bar stays at the bottom of the screen. */
+    html.ppns-pfs-on [data-ppns-pfs] video[data-ppns-pfs-fill], html.ppns-pfs-on #ppns-touch {
+      position: fixed !important; left: var(--ppns-vl, 0px) !important; top: var(--ppns-vt, 0px) !important; right: auto !important;
+      bottom: auto !important; width: var(--ppns-vw, 100vw) !important; height: var(--ppns-vh, 100dvh) !important; }
+    #ppns-diag { position: absolute; left: 8px; top: 52px; z-index: 5; background: rgba(0,0,0,.8); color: #0f0; pointer-events: auto;
+      font: 11px/1.35 ui-monospace, Menlo, monospace; padding: 6px 8px; border-radius: 6px; white-space: pre; }
     /* two fingers in full screen: zoom and move the picture freely */
     html.ppns-pfs-on [data-ppns-pfs] video, html [data-ppns-surface]:fullscreen video, html [data-ppns-surface]:-webkit-full-screen video {
       transform: translate(var(--ppns-zx, 0px), var(--ppns-zy, 0px)) scale(var(--ppns-zs, 1)) !important; transform-origin: 50% 50% !important;
       transition: none !important; }
-    #ppns-touch .ppns-t-ver { font-size: 11px; opacity: .45; padding: 0 6px; }
+    #ppns-touch .ppns-t-ver { font: 11px/1 -apple-system, Arial, sans-serif !important; opacity: .45; padding: 10px 6px !important; color: #fff; }
     [data-ppns-pfs-anc] { transform: none !important; filter: none !important; contain: none !important; will-change: auto !important;
       perspective: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
       container-type: normal !important; z-index: 2147483600 !important; }
@@ -975,14 +982,15 @@
     const anc = new Set();
     for (let a = r && r.parentElement; a && a !== document.documentElement; a = a.parentElement) anc.add(a);
     document.querySelectorAll('[data-ppns-pfs]').forEach((el) => { if (el !== r) el.removeAttribute('data-ppns-pfs'); });
-    document.querySelectorAll('[data-ppns-pfs-anc]').forEach((el) => { if (!anc.has(el)) el.removeAttribute('data-ppns-pfs-anc'); });
     if (r && !r.hasAttribute('data-ppns-pfs')) r.setAttribute('data-ppns-pfs', '');
-    anc.forEach((a) => { if (!a.hasAttribute('data-ppns-pfs-anc')) a.setAttribute('data-ppns-pfs-anc', ''); });
     const fill = new Set();
     const v = r && TL.video();
     for (let e = v; r && e && e !== r && r.contains(e); e = e.parentElement) fill.add(e);
+    fill.forEach((e) => { if (e !== v) anc.add(e); });
     document.querySelectorAll('[data-ppns-pfs-fill]').forEach((el) => { if (!fill.has(el)) el.removeAttribute('data-ppns-pfs-fill'); });
     fill.forEach((e) => { if (!e.hasAttribute('data-ppns-pfs-fill')) e.setAttribute('data-ppns-pfs-fill', ''); });
+    document.querySelectorAll('[data-ppns-pfs-anc]').forEach((el) => { if (!anc.has(el)) el.removeAttribute('data-ppns-pfs-anc'); });
+    anc.forEach((a) => { if (!a.hasAttribute('data-ppns-pfs-anc')) a.setAttribute('data-ppns-pfs-anc', ''); });
     document.documentElement.classList.toggle('ppns-pfs-on', !!r);
     fitToScreen();
     let room = document.getElementById('ppns-scrollroom');
@@ -1016,6 +1024,47 @@
   }
   ['resize', 'scroll', 'orientationchange'].forEach((ev) => window.addEventListener(ev, fitToScreen, { passive: true }));
   try { ['resize', 'scroll'].forEach((ev) => window.visualViewport.addEventListener(ev, fitToScreen, { passive: true })); } catch {}
+
+  // Diagnostics (tap the version): the real sizes on the device, to fix layout problems from a screenshot.
+  let diagTimer = null;
+  function toggleDiag() {
+    const old = document.getElementById('ppns-diag');
+    if (old) { old.remove(); clearInterval(diagTimer); return; }
+    const d = document.createElement('div');
+    d.id = 'ppns-diag';
+    touchEl.appendChild(d);
+    const probe = (h) => {
+      const e = document.createElement('div');
+      e.style.cssText = 'position:fixed;top:0;left:0;width:1px;visibility:hidden;height:' + h;
+      document.body.appendChild(e);
+      const v = Math.round(e.getBoundingClientRect().height);
+      e.remove();
+      return v;
+    };
+    const box = (el) => {
+      if (!el) return '-';
+      const r = el.getBoundingClientRect();
+      return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height);
+    };
+    const fill = () => {
+      const vv = window.visualViewport;
+      const v = TL.video();
+      const ver = (/OS (\d+[_\d]*)/.exec(navigator.userAgent) || [])[1] || '?';
+      d.textContent = [
+        'v0.5.6  iOS ' + ver.replace(/_/g, '.') + '  fs=' + pfsOn + ' real=' + !!fsElement(),
+        'screen ' + screen.width + 'x' + screen.height + '  dpr ' + devicePixelRatio,
+        'inner ' + innerWidth + 'x' + innerHeight + '  scrollY ' + Math.round(scrollY) + '  docH ' + document.documentElement.scrollHeight,
+        'vv ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' top ' + Math.round(vv.offsetTop) + ' pageTop ' + Math.round(vv.pageTop) : '-'),
+        'svh ' + probe('100svh') + '  dvh ' + probe('100dvh') + '  lvh ' + probe('100lvh') + '  vh ' + probe('100vh'),
+        'player ' + box(playerRoot()),
+        'video  ' + box(v) + (v ? '  ' + v.videoWidth + 'x' + v.videoHeight : ''),
+        'overlay ' + box(touchEl) + '  bar ' + box(touchEl.querySelector('.ppns-t-bot')),
+        'view ' + view.s.toFixed(2) + 'x ' + view.x.toFixed(2) + ',' + view.y.toFixed(2) + '  banner ' + document.querySelectorAll('meta[name="apple-itunes-app"]').length,
+      ].join('\n');
+    };
+    fill();
+    diagTimer = setInterval(fill, 500);
+  }
 
   // Safari's bars still showing? (the visible height is clearly less than the screen's)
   const safariBarsShown = () => {
@@ -1137,7 +1186,7 @@
         <div class="ppns-t-top">
           <button data-act="back" aria-label="Back">${ICON_BACK}</button>
           <span class="ppns-t-flex"></span>
-          <span class="ppns-t-ver">v0.5.5</span>
+          <button data-act="info" class="ppns-t-ver" aria-label="Version and diagnostics">v0.5.6</button>
           <button data-act="site" aria-label="Site controls">${ICON_MORE}</button>
           <button data-act="fs" aria-label="Full screen">${ICON_FS}</button>
         </div>
@@ -1183,6 +1232,7 @@
           break;
         }
         case 'back': if (isFs()) exitFs(); else history.back(); break;
+        case 'info': toggleDiag(); break;
       }
       setUi(true);
     }));
@@ -1236,6 +1286,7 @@
     }
     addTouchStyle();
     if (!document.documentElement.style.getPropertyValue('--ppns-zs')) applyView();
+    if (IOS) document.querySelectorAll('meta[name="apple-itunes-app"]').forEach((m) => m.setAttribute('name', 'apple-itunes-app-off'));
     const h = playerRoot();
     if (!touchEl) touchEl = buildTouch();
     // Always the last child: the site's own layers may sit at the same (maximum) z-index, and the last one wins.

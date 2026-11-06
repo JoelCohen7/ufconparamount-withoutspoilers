@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Paramount+ Without Spoilers
 // @namespace    joel.paramountplus.nospoilers
-// @version      0.5.6
+// @version      0.5.7
 // @description  Hides durations and time remaining on UFC, Dana White's Contender Series and LFA replays on Paramount+ (everything else is left alone). Adds ±10 s / 30 s / 1 min / 5 min jumps and a fixed-scale seek bar with thumbnails. Works on computers and on iPhone/iPad (Safari + Userscripts).
 // @match        https://www.paramountplus.com/*
 // @homepageURL  https://github.com/JoelCohen7/ufconparamount-withoutspoilers
@@ -909,10 +909,15 @@
     #ppns-touch .ppns-t-ver { font: 11px/1 -apple-system, Arial, sans-serif !important; opacity: .45; padding: 10px 6px !important; color: #fff; }
     [data-ppns-pfs-anc] { transform: none !important; filter: none !important; contain: none !important; will-change: auto !important;
       perspective: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-      container-type: normal !important; z-index: 2147483600 !important; }
+      container-type: normal !important; z-index: 2147483600 !important;
+      overflow: visible !important; clip-path: none !important; -webkit-mask: none !important; mask: none !important; }
+    /* fixed boxes of the site around the player keep the size of the screen with Safari's bars: they take the visible area */
+    [data-ppns-pfs-box] { position: fixed !important; left: var(--ppns-vl, 0px) !important; top: var(--ppns-vt, 0px) !important;
+      right: auto !important; bottom: auto !important; width: var(--ppns-vw, 100vw) !important; height: var(--ppns-vh, 100dvh) !important;
+      max-height: none !important; min-height: 0 !important; }
     /* iPhone: Safari only hides its bars when the page scrolls, so in full screen the page gets room to scroll
        (the player stays fixed on top) and a swipe up on the video scrolls it */
-    html.ppns-pfs-on, html.ppns-pfs-on body { overflow-y: auto !important; }
+    html.ppns-pfs-on, html.ppns-pfs-on body { overflow: visible !important; }
     #ppns-scrollroom { height: 100vh; pointer-events: none; }
   `;
   const addTouchStyle = () => {
@@ -991,6 +996,12 @@
     fill.forEach((e) => { if (!e.hasAttribute('data-ppns-pfs-fill')) e.setAttribute('data-ppns-pfs-fill', ''); });
     document.querySelectorAll('[data-ppns-pfs-anc]').forEach((el) => { if (!anc.has(el)) el.removeAttribute('data-ppns-pfs-anc'); });
     anc.forEach((a) => { if (!a.hasAttribute('data-ppns-pfs-anc')) a.setAttribute('data-ppns-pfs-anc', ''); });
+    const boxes = new Set();
+    for (let a = r && r.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      if (a.hasAttribute('data-ppns-pfs-box') || getComputedStyle(a).position === 'fixed') boxes.add(a);
+    }
+    document.querySelectorAll('[data-ppns-pfs-box]').forEach((el) => { if (!boxes.has(el)) el.removeAttribute('data-ppns-pfs-box'); });
+    boxes.forEach((a) => { if (!a.hasAttribute('data-ppns-pfs-box')) a.setAttribute('data-ppns-pfs-box', ''); });
     document.documentElement.classList.toggle('ppns-pfs-on', !!r);
     fitToScreen();
     let room = document.getElementById('ppns-scrollroom');
@@ -1046,12 +1057,27 @@
       const r = el.getBoundingClientRect();
       return Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height);
     };
+    // boxes around the video shorter than the visible area that could cut it (name, size, position, overflow)
+    const clippers = (v) => {
+      const out = [];
+      const vh = window.visualViewport ? window.visualViewport.height : innerHeight;
+      for (let e = v && v.parentElement; e; e = e.parentElement) {
+        const cs = getComputedStyle(e);
+        const h = Math.round(e.getBoundingClientRect().height);
+        if (h < vh - 4 && (cs.overflow !== 'visible' || cs.position === 'fixed' || cs.clipPath !== 'none')) {
+          const name = e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/)[0] : '');
+          out.push('cut? ' + name + ' h' + h + ' ' + cs.position + ' ov:' + cs.overflow + (cs.clipPath !== 'none' ? ' clip' : ''));
+        }
+        if (out.length >= 4) break;
+      }
+      return out.length ? out : ['cut? none'];
+    };
     const fill = () => {
       const vv = window.visualViewport;
       const v = TL.video();
       const ver = (/OS (\d+[_\d]*)/.exec(navigator.userAgent) || [])[1] || '?';
       d.textContent = [
-        'v0.5.6  iOS ' + ver.replace(/_/g, '.') + '  fs=' + pfsOn + ' real=' + !!fsElement(),
+        'v0.5.7  iOS ' + ver.replace(/_/g, '.') + '  fs=' + pfsOn + ' real=' + !!fsElement(),
         'screen ' + screen.width + 'x' + screen.height + '  dpr ' + devicePixelRatio,
         'inner ' + innerWidth + 'x' + innerHeight + '  scrollY ' + Math.round(scrollY) + '  docH ' + document.documentElement.scrollHeight,
         'vv ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' top ' + Math.round(vv.offsetTop) + ' pageTop ' + Math.round(vv.pageTop) : '-'),
@@ -1060,6 +1086,7 @@
         'video  ' + box(v) + (v ? '  ' + v.videoWidth + 'x' + v.videoHeight : ''),
         'overlay ' + box(touchEl) + '  bar ' + box(touchEl.querySelector('.ppns-t-bot')),
         'view ' + view.s.toFixed(2) + 'x ' + view.x.toFixed(2) + ',' + view.y.toFixed(2) + '  banner ' + document.querySelectorAll('meta[name="apple-itunes-app"]').length,
+        ...clippers(v),
       ].join('\n');
     };
     fill();
@@ -1186,7 +1213,7 @@
         <div class="ppns-t-top">
           <button data-act="back" aria-label="Back">${ICON_BACK}</button>
           <span class="ppns-t-flex"></span>
-          <button data-act="info" class="ppns-t-ver" aria-label="Version and diagnostics">v0.5.6</button>
+          <button data-act="info" class="ppns-t-ver" aria-label="Version and diagnostics">v0.5.7</button>
           <button data-act="site" aria-label="Site controls">${ICON_MORE}</button>
           <button data-act="fs" aria-label="Full screen">${ICON_FS}</button>
         </div>
